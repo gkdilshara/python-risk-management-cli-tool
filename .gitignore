@@ -1,0 +1,44 @@
+# ── Environment & Secrets ───────────────────────────────────
+.env
+*.env
+!.env.example
+
+# ── Virtual Environments ─────────────────────────────────────
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ── Python Bytecode & Cache ──────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Distribution & Packaging ─────────────────────────────────
+dist/
+build/
+*.egg-info/
+*.egg
+
+# ── Logs & Databases ─────────────────────────────────────────
+*.log
+*.sqlite
+*.db
+
+# ── IDE & Editor Settings ────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# ── OS Generated Files ───────────────────────────────────────
+Thumbs.db
+desktop.ini
+.DS_Store
