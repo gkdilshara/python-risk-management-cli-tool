@@ -39,12 +39,19 @@ def _list_accounts():
         warning("No accounts found. Create one first.")
     else:
         table = [
-            [r["id"], r["name"], r["currency"], f"{float(r['balance']):,.2f}", r["created_at"]]
+            [
+                r["id"],
+                r["name"],
+                r.get("account_type", "STANDARD"),
+                r["currency"],
+                f"{float(r['balance']):,.2f}",
+                r["created_at"],
+            ]
             for r in rows
         ]
         print(C_BORDER + tabulate(
             table,
-            headers=["ID", "Name", "Currency", "Balance", "Created"],
+            headers=["ID", "Name", "Type", "Currency", "Balance", "Created"],
             tablefmt="rounded_outline",
         ))
     pause()
@@ -54,17 +61,32 @@ def _create_account():
     clear()
     print_logo()
     section_header("CREATE NEW ACCOUNT")
-    name     = prompt("Account name")
+    name = prompt("Account name")
     if not name:
         error("Name cannot be empty.")
         pause()
         return
+
+    # Select Account Type
+    type_idx = arrow_menu(
+        "SELECT ACCOUNT TYPE",
+        [
+            "📈  Standard Trading Account  (Forex, Crypto, Stocks)",
+            "🎯  Deriv Option Trading Account  (Rise/Fall Digital Options)",
+            "🔙  Cancel",
+        ],
+    )
+    if type_idx in (2, -1):
+        return
+
+    acc_type = "STANDARD" if type_idx == 0 else "DERIV_OPTION"
+
     currency = prompt("Currency", "USD")
     balance  = prompt_float("Starting balance", 10000.00)
 
-    acc_id = AccountModel.create(name, balance, currency.upper())
+    acc_id = AccountModel.create(name, balance, currency.upper(), account_type=acc_type)
     RiskRuleModel.create_defaults(acc_id)
-    info(f"Account '{name}' created with ID {acc_id}.")
+    info(f"Account '{name}' [{acc_type}] created with ID {acc_id}.")
     pause()
 
 
@@ -95,7 +117,7 @@ def _delete_account():
         error("Account not found.")
         pause()
         return
-    confirm = prompt(f"Delete '{acc['name']}'? This removes ALL trades! (yes/no)", "no")
+    confirm = prompt(f"Delete '{acc['name']}'? This removes ALL trades & sessions! (yes/no)", "no")
     if confirm.lower() == "yes":
         AccountModel.delete(acc_id)
         info("Account deleted.")

@@ -15,6 +15,7 @@ from ui.helpers     import arrow_menu, clear, print_logo, section_header, pause,
 from ui.theme       import C_DIM, C_RESET, C_BORDER, C_TITLE, C_HEADER
 from ui.screens.dashboard   import screen_dashboard
 from ui.screens.accounts    import screen_accounts
+from ui.screens.sessions    import screen_sessions
 from ui.screens.trades      import screen_trades
 from ui.screens.risk        import screen_risk
 from ui.screens.journal     import screen_journal
@@ -24,6 +25,7 @@ from ui.screens.calculator  import screen_calculator
 MAIN_MENU = [
     "📊  Dashboard & Stats",
     "👤  Account Management",
+    "⏱️   Trading Sessions",
     "📈  Trade Management",
     "🛡️   Risk Rules",
     "📓  Trading Journal",
@@ -41,11 +43,12 @@ def main():
 
         if choice == 0:   screen_dashboard()
         elif choice == 1: screen_accounts()
-        elif choice == 2: screen_trades()
-        elif choice == 3: screen_risk()
-        elif choice == 4: screen_journal()
-        elif choice == 5: screen_calculator()
-        elif choice in (6, -1):
+        elif choice == 2: screen_sessions()
+        elif choice == 3: screen_trades()
+        elif choice == 4: screen_risk()
+        elif choice == 5: screen_journal()
+        elif choice == 6: screen_calculator()
+        elif choice in (7, -1):
             clear()
             print_logo()
             section_header("GOODBYE")

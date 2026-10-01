@@ -6,6 +6,7 @@
 from tabulate import tabulate
 from models.account   import AccountModel
 from models.trade     import TradeModel
+from models.session   import SessionModel
 from models.risk_rule import RiskRuleModel
 from models.journal   import JournalModel
 from ui.helpers import *
@@ -19,8 +20,8 @@ def screen_trades():
             "TRADE MANAGEMENT",
             [
                 "📂  Select Account & View Trades",
-                "➕  Open New Trade",
-                "🔒  Close Trade (Record Exit)",
+                "➕  Open / Record New Trade",
+                "🔒  Close Trade (Record Exit / Option Outcome)",
                 "❌  Cancel Trade",
                 "🔙  Back to Main Menu",
             ],
@@ -41,12 +42,30 @@ def _select_account():
         error("No accounts found. Create an account first.")
         pause()
         return None
-    names  = [f"[{a['id']}]  {a['name']}  ({a['currency']} {float(a['balance']):,.2f})" for a in accounts]
-    names += ["🔙  Cancel"]
-    idx    = arrow_menu("SELECT ACCOUNT", names)
+    names = [
+        f"[{a['id']}]  {a['name']}  [{a.get('account_type', 'STANDARD')}]  ({a['currency']} {float(a['balance']):,.2f})"
+        for a in accounts
+    ]
+    names.append("🔙  Cancel")
+    idx = arrow_menu("SELECT ACCOUNT", names)
     if idx < 0 or idx == len(accounts):
         return None
     return accounts[idx]
+
+
+def _select_session_for_account(account_id: int):
+    """Optionally select an active trading session for an account."""
+    sessions = SessionModel.get_active(account_id)
+    if not sessions:
+        return None
+
+    names = [f"[{s['id']}]  {s['session_name']} ({s['trading_method']})" for s in sessions]
+    names.append("🌐  No Session (Standalone Trade)")
+    idx = arrow_menu("SELECT SESSION FOR THIS TRADE", names)
+
+    if idx < 0 or idx == len(sessions):
+        return None
+    return sessions[idx]
 
 
 def _pnl_color(pnl):
@@ -62,9 +81,11 @@ def _view_trades():
     if not acc:
         return
 
+    acc_type = acc.get("account_type", "STANDARD")
+
     while True:
         status_choice = arrow_menu(
-            f"TRADES — {acc['name']}",
+            f"TRADES — {acc['name']} [{acc_type}]",
             ["🟢  Open Trades", "🔵  Closed Trades", "⚪  All Trades", "🔙  Back"],
             subtitle=f"Balance: {float(acc['balance']):,.2f} {acc['currency']}",
         )
@@ -85,21 +106,27 @@ def _view_trades():
             table = []
             for r in rows:
                 pnl_str = _pnl_color(r["pnl"]) + C_RESET
+                res_str = r.get("option_result") or "—"
+                if res_str == "WIN":
+                    res_str = f"{C_PROFIT}WIN{C_RESET}"
+                elif res_str == "LOSS":
+                    res_str = f"{C_LOSS}LOSS{C_RESET}"
+
                 table.append([
                     r["id"],
+                    r.get("session_id") or "—",
                     r["symbol"],
                     r["trade_type"],
                     f"{float(r['quantity']):.4f}",
                     f"{float(r['entry_price']):.4f}",
                     f"{float(r['exit_price']):.4f}" if r["exit_price"] else "—",
-                    f"{float(r['stop_loss']):.4f}"   if r["stop_loss"]  else "—",
-                    f"{float(r['take_profit']):.4f}" if r["take_profit"] else "—",
+                    res_str,
                     pnl_str,
                     r["status"],
                 ])
             print(C_BORDER + tabulate(
                 table,
-                headers=["ID", "Symbol", "Type", "Qty", "Entry", "Exit", "SL", "TP", "P&L", "Status"],
+                headers=["ID", "Sess#", "Symbol", "Type", "Stake/Qty", "Entry", "Exit", "Outcome", "P&L", "Status"],
                 tablefmt="rounded_outline",
             ))
         pause()
@@ -157,60 +184,127 @@ def _open_trade():
     if not acc:
         return
 
+    acc_type = acc.get("account_type", "STANDARD")
+    session  = _select_session_for_account(acc["id"])
+    session_id = session["id"] if session else None
+
     clear()
     print_logo()
-    section_header(f"OPEN NEW TRADE  [{acc['name']}]")
-    print(f"  Balance: {C_HEADER}{float(acc['balance']):,.2f} {acc['currency']}{C_RESET}\n")
+    section_header(f"OPEN NEW TRADE  [{acc['name']} - {acc_type}]")
+    if session:
+        print(f"  {C_HEADER}Session:{C_RESET} {session['session_name']} ({session['trading_method']})\n")
+    print(f"  {C_HEADER}Balance:{C_RESET} {float(acc['balance']):,.2f} {acc['currency']}\n")
 
-    symbol      = prompt("Symbol (e.g. BTCUSD, AAPL, EURUSD)").upper()
-    if not symbol:
-        error("Symbol cannot be empty.")
-        pause()
-        return
+    if acc_type == "DERIV_OPTION":
+        # ── DERIV OPTION TRADE FLOW ─────────────────────────────
+        symbol = prompt("Symbol / Market (e.g. Volatility 100 Index, EURUSD)", "Volatility 100 Index").upper()
 
-    trade_type_idx = arrow_menu("Trade Type", ["📈  BUY  (Long)", "📉  SELL (Short)", "🔙  Cancel"])
-    if trade_type_idx == 2 or trade_type_idx == -1:
-        return
-    trade_type = "BUY" if trade_type_idx == 0 else "SELL"
+        type_idx = arrow_menu("Deriv Option Contract Type", ["📈  RISE (Call)", "📉  FALL (Put)", "🔙  Cancel"])
+        if type_idx in (2, -1):
+            return
+        trade_type = "RISE" if type_idx == 0 else "FALL"
 
-    qty         = prompt_float("Quantity / Lot size")
-    entry_price = prompt_float("Entry price")
-    stop_loss   = prompt("Stop loss price (blank to skip)")
-    take_profit = prompt("Take profit price (blank to skip)")
-    notes       = prompt("Notes (optional)", "")
+        stake = prompt_float("Stake Capital Amount ($)", 10.00)
 
-    sl = float(stop_loss) if stop_loss else None
-    tp = float(take_profit) if take_profit else None
+        default_payout = float(session["payout_percentage"]) if (session and session["payout_percentage"]) else 95.0
+        payout_pct = prompt_float("Payout Percentage (%)", default_payout)
 
-    # Risk validation
-    ok, warns = _check_risk(acc, symbol, qty, entry_price, sl)
+        # Ask if trade outcome is known now (or keep open)
+        outcome_idx = arrow_menu(
+            "Record Option Outcome Now?",
+            [
+                "🏆  WIN   (Recorded immediately with payout profit)",
+                "💀  LOSS  (Recorded immediately as loss)",
+                "⏳  OPEN  (Keep as open option trade)",
+            ],
+        )
+        if outcome_idx == -1:
+            return
 
-    if warns:
-        print()
-        for w in warns:
-            warning(w)
+        option_res = "WIN" if outcome_idx == 0 else ("LOSS" if outcome_idx == 1 else None)
+        notes = prompt("Notes (optional)", "")
 
-    if not ok:
-        print()
-        override = prompt("Risk limits breached. Override and open anyway? (yes/no)", "no")
-        if override.lower() != "yes":
-            warning("Trade cancelled.")
+        trade_id = TradeModel.create(
+            account_id=acc["id"],
+            symbol=symbol,
+            trade_type=trade_type,
+            quantity=stake,
+            entry_price=stake,
+            session_id=session_id,
+            payout_percentage=payout_pct,
+            option_result=option_res,
+            notes=notes,
+        )
+
+        if option_res:
+            pnl_val = round(stake * (payout_pct / 100.0), 2) if option_res == "WIN" else -round(stake, 2)
+            col = C_PROFIT if pnl_val >= 0 else C_LOSS
+            info(f"Deriv Option Trade #{trade_id} [{trade_type}] recorded as {option_res}! P&L: {col}{pnl_val:+,.2f}{C_RESET}")
+        else:
+            info(f"Deriv Option Trade #{trade_id} [{trade_type}] opened for ${stake:.2f}.")
+
+        JournalModel.upsert(acc["id"], date.today())
+
+    else:
+        # ── STANDARD TRADING FLOW ────────────────────────────────
+        symbol = prompt("Symbol (e.g. BTCUSD, AAPL, EURUSD)").upper()
+        if not symbol:
+            error("Symbol cannot be empty.")
             pause()
             return
 
-    trade_id = TradeModel.create(
-        acc["id"], symbol, trade_type, qty, entry_price, sl, tp, notes
-    )
-    info(f"Trade #{trade_id} opened: {trade_type} {qty} {symbol} @ {entry_price}")
+        trade_type_idx = arrow_menu("Trade Type", ["📈  BUY  (Long)", "📉  SELL (Short)", "🔙  Cancel"])
+        if trade_type_idx in (2, -1):
+            return
+        trade_type = "BUY" if trade_type_idx == 0 else "SELL"
+
+        qty         = prompt_float("Quantity / Lot size")
+        entry_price = prompt_float("Entry price")
+        stop_loss   = prompt("Stop loss price (blank to skip)")
+        take_profit = prompt("Take profit price (blank to skip)")
+        notes       = prompt("Notes (optional)", "")
+
+        sl = float(stop_loss) if stop_loss else None
+        tp = float(take_profit) if take_profit else None
+
+        # Risk validation
+        ok, warns = _check_risk(acc, symbol, qty, entry_price, sl)
+
+        if warns:
+            print()
+            for w in warns:
+                warning(w)
+
+        if not ok:
+            print()
+            override = prompt("Risk limits breached. Override and open anyway? (yes/no)", "no")
+            if override.lower() != "yes":
+                warning("Trade cancelled.")
+                pause()
+                return
+
+        trade_id = TradeModel.create(
+            account_id=acc["id"],
+            symbol=symbol,
+            trade_type=trade_type,
+            quantity=qty,
+            entry_price=entry_price,
+            stop_loss=sl,
+            take_profit=tp,
+            session_id=session_id,
+            notes=notes,
+        )
+        info(f"Trade #{trade_id} opened: {trade_type} {qty} {symbol} @ {entry_price}")
+
     pause()
 
 
 def _close_trade():
     clear()
     print_logo()
-    section_header("CLOSE TRADE")
-    trade_id   = prompt_int("Trade ID to close")
-    trade      = TradeModel.get(trade_id)
+    section_header("CLOSE / RESOLVE TRADE")
+    trade_id = prompt_int("Trade ID to close")
+    trade    = TradeModel.get(trade_id)
     if not trade:
         error("Trade not found.")
         pause()
@@ -220,19 +314,37 @@ def _close_trade():
         pause()
         return
 
-    print(
-        f"\n  {C_HEADER}{trade['trade_type']} {float(trade['quantity']):.4f} {trade['symbol']}"
-        f" @ {float(trade['entry_price']):.4f}{C_RESET}\n"
-    )
-    exit_price = prompt_float("Exit price")
-    pnl, err   = TradeModel.close(trade_id, exit_price)
-    if err:
-        error(err)
+    trade_type = trade["trade_type"]
+
+    if trade_type in ("RISE", "FALL"):
+        # Option trade close
+        print(f"\n  {C_HEADER}Option Contract:{C_RESET} {trade['trade_type']} ${float(trade['quantity']):,.2f} on {trade['symbol']}\n")
+        res_idx = arrow_menu("Option Result", ["🏆  WIN  (Full Payout)", "💀  LOSS (Stake Lost)", "🔙  Cancel"])
+        if res_idx in (2, -1):
+            return
+
+        result_str = "WIN" if res_idx == 0 else "LOSS"
+        pnl, err = TradeModel.close_option(trade_id, result_str)
+        if err:
+            error(err)
+        else:
+            col = C_PROFIT if pnl >= 0 else C_LOSS
+            info(f"Option Trade #{trade_id} closed as {result_str}. P&L: {col}{pnl:+,.2f}{C_RESET}")
+            JournalModel.upsert(trade["account_id"], date.today())
     else:
-        col = C_PROFIT if pnl >= 0 else C_LOSS
-        info(f"Trade closed. P&L: {col}{pnl:+,.2f}{C_RESET}")
-        # update journal
-        JournalModel.upsert(trade["account_id"], date.today())
+        # Standard trade close
+        print(
+            f"\n  {C_HEADER}{trade['trade_type']} {float(trade['quantity']):.4f} {trade['symbol']}"
+            f" @ {float(trade['entry_price']):.4f}{C_RESET}\n"
+        )
+        exit_price = prompt_float("Exit price")
+        pnl, err   = TradeModel.close(trade_id, exit_price)
+        if err:
+            error(err)
+        else:
+            col = C_PROFIT if pnl >= 0 else C_LOSS
+            info(f"Trade closed. P&L: {col}{pnl:+,.2f}{C_RESET}")
+            JournalModel.upsert(trade["account_id"], date.today())
     pause()
 
 

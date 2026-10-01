@@ -21,11 +21,11 @@ class AccountModel:
         return cur.fetchone()
 
     @staticmethod
-    def create(name: str, balance: float, currency: str = "USD"):
+    def create(name: str, balance: float, currency: str = "USD", account_type: str = "STANDARD"):
         cur = DBConnection.cursor()
         cur.execute(
-            "INSERT INTO accounts (name, balance, currency) VALUES (%s, %s, %s)",
-            (name, balance, currency),
+            "INSERT INTO accounts (name, account_type, balance, currency) VALUES (%s, %s, %s, %s)",
+            (name, account_type.upper(), balance, currency),
         )
         return cur.lastrowid
 

@@ -6,6 +6,7 @@
 from tabulate import tabulate
 from models.account   import AccountModel
 from models.trade     import TradeModel
+from models.session   import SessionModel
 from models.risk_rule import RiskRuleModel
 from ui.helpers import *
 from ui.theme   import *
@@ -22,9 +23,12 @@ def screen_dashboard():
         pause()
         return
 
-    names  = [f"[{a['id']}]  {a['name']}  ({a['currency']} {float(a['balance']):,.2f})" for a in accounts]
-    names += ["🔙  Back"]
-    idx    = arrow_menu("DASHBOARD — SELECT ACCOUNT", names)
+    names = [
+        f"[{a['id']}]  {a['name']}  [{a.get('account_type', 'STANDARD')}]  ({a['currency']} {float(a['balance']):,.2f})"
+        for a in accounts
+    ]
+    names.append("🔙  Back")
+    idx = arrow_menu("DASHBOARD — SELECT ACCOUNT", names)
 
     if idx < 0 or idx == len(accounts):
         return
@@ -37,6 +41,8 @@ def _show_dashboard(acc):
     clear()
     print_logo()
     section_header(f"DASHBOARD  ──  {acc['name']}")
+
+    acc_type = acc.get("account_type", "STANDARD")
 
     # ── Summary stats ────────────────────────────────────────
     all_trades    = TradeModel.all(acc["id"])
@@ -51,13 +57,35 @@ def _show_dashboard(acc):
 
     balance = float(acc["balance"])
     rule    = RiskRuleModel.get(acc["id"])
+    active_sessions = SessionModel.get_active(acc["id"])
 
     # ── Account card ─────────────────────────────────────────
     bal_col = C_SUCCESS if balance > 0 else C_LOSS
-    print(f"  {C_HEADER}Account :{C_RESET}  {acc['name']}")
+    print(f"  {C_HEADER}Account :{C_RESET}  {acc['name']}  [{acc_type}]")
     print(f"  {C_HEADER}Currency:{C_RESET}  {acc['currency']}")
     print(f"  {C_HEADER}Balance :{C_RESET}  {bal_col}{balance:,.2f}{C_RESET}")
     print()
+
+    # ── Active Sessions snapshot ──────────────────────────────
+    if active_sessions:
+        section_header("ACTIVE TRADING SESSIONS")
+        sess_rows = [
+            [
+                s["id"],
+                s["session_name"],
+                s["trading_method"],
+                f"{float(s['payout_percentage']):.1f}%" if s["payout_percentage"] else "—",
+                f"{float(s['reserved_stake_capital']):,.2f}",
+                s["created_at"],
+            ]
+            for s in active_sessions
+        ]
+        print(C_BORDER + tabulate(
+            sess_rows,
+            headers=["ID", "Session Name", "Method", "Payout %", "Reserved Capital", "Started At"],
+            tablefmt="rounded_outline",
+        ))
+        print()
 
     # ── Trade stats ──────────────────────────────────────────
     pnl_col  = C_PROFIT if total_pnl >= 0 else C_LOSS
@@ -103,17 +131,21 @@ def _show_dashboard(acc):
     if open_trades:
         section_header("OPEN POSITIONS")
         table = [
-            [t["id"], t["symbol"], t["trade_type"],
-             f"{float(t['quantity']):.4f}",
-             f"{float(t['entry_price']):.4f}",
-             f"{float(t['stop_loss']):.4f}"   if t["stop_loss"]  else "—",
-             f"{float(t['take_profit']):.4f}" if t["take_profit"] else "—",
-             ]
+            [
+                t["id"],
+                t.get("session_id") or "—",
+                t["symbol"],
+                t["trade_type"],
+                f"{float(t['quantity']):.4f}",
+                f"{float(t['entry_price']):.4f}",
+                f"{float(t['stop_loss']):.4f}"   if t["stop_loss"]  else "—",
+                f"{float(t['take_profit']):.4f}" if t["take_profit"] else "—",
+            ]
             for t in open_trades
         ]
         print(C_BORDER + tabulate(
             table,
-            headers=["ID", "Symbol", "Type", "Qty", "Entry", "Stop Loss", "Take Profit"],
+            headers=["ID", "Sess#", "Symbol", "Type", "Stake/Qty", "Entry", "Stop Loss", "Take Profit"],
             tablefmt="rounded_outline",
         ))
 
