@@ -4,11 +4,12 @@
 # ============================================================
 
 from tabulate import tabulate
-from models.account   import AccountModel
-from models.trade     import TradeModel
-from models.session   import SessionModel
-from models.risk_rule import RiskRuleModel
-from models.journal   import JournalModel
+from models.account        import AccountModel
+from models.trade          import TradeModel
+from models.session        import SessionModel
+from models.risk_rule      import RiskRuleModel
+from models.journal        import JournalModel
+from models.smart_stake    import SmartStakeEngine
 from ui.helpers import *
 from ui.theme   import *
 from datetime   import date
@@ -66,6 +67,55 @@ def _select_session_for_account(account_id: int):
     if idx < 0 or idx == len(sessions):
         return None
     return sessions[idx]
+
+
+def _prompt_smart_stake_selector(
+    account_id: int,
+    session_id: int = None,
+    payout_pct: float = 95.0,
+    currency: str = "USD",
+) -> float:
+    """
+    Present the Smart Advanced Stake Suggestion Assistant with 5 Safety Levels.
+    Returns chosen stake amount (float) or None if cancelled.
+    """
+    sugg = SmartStakeEngine.get_suggestions(account_id, session_id, payout_pct)
+
+    clear()
+    print_logo()
+    section_header("🧠 SMART ADVANCED STAKE ASSISTANT (5 SAFETY LEVELS)")
+
+    print(f"  {C_HEADER}Capital Basis:{C_RESET}     ${sugg['base_capital']:,.2f} {currency}  ({sugg['capital_source']})")
+    print(f"  {C_HEADER}Max Risk Limit:{C_RESET}    {sugg['max_risk_pct']:.1f}%\n")
+
+    if sugg["recommendation_note"]:
+        warning(sugg["recommendation_note"])
+        print()
+
+    menu_items = []
+    for item in sugg["levels"]:
+        rec_str    = " ⭐ RECOMMENDED" if item["is_recommended"] else ""
+        breach_str = " (⚠️ BREACHES RULE)" if item["is_breach"] else ""
+        menu_items.append(
+            f"{item['badge']} {item['name']} ({item['pct']:.1f}%) ── ${item['stake_amount']:,.2f}  "
+            f"(Est. Win: +${item['payout_profit']:,.2f}){rec_str}{breach_str}"
+        )
+
+    menu_items.append("✏️   Enter Custom Stake Amount Manually...")
+    menu_items.append("🔙  Cancel Trade")
+
+    subtitle_text = f"Select a safety level or enter a custom amount (Base: ${sugg['base_capital']:,.2f} {currency})"
+    choice = arrow_menu("SMART STAKE SUGGESTIONS", menu_items, subtitle=subtitle_text)
+
+    if choice < 0 or choice == len(menu_items) - 1:
+        return None
+
+    if choice == len(menu_items) - 2:
+        return prompt_float("Enter Custom Stake Amount ($)")
+
+    chosen_level = sugg["levels"][choice]
+    info(f"Selected {chosen_level['name']} ({chosen_level['pct']:.1f}%): ${chosen_level['stake_amount']:,.2f} {currency}")
+    return chosen_level["stake_amount"]
 
 
 def _pnl_color(pnl):
@@ -184,8 +234,8 @@ def _open_trade():
     if not acc:
         return
 
-    acc_type = acc.get("account_type", "STANDARD")
-    session  = _select_session_for_account(acc["id"])
+    acc_type   = acc.get("account_type", "STANDARD")
+    session    = _select_session_for_account(acc["id"])
     session_id = session["id"] if session else None
 
     clear()
@@ -204,10 +254,20 @@ def _open_trade():
             return
         trade_type = "RISE" if type_idx == 0 else "FALL"
 
-        stake = prompt_float("Stake Capital Amount ($)", 10.00)
-
         default_payout = float(session["payout_percentage"]) if (session and session["payout_percentage"]) else 95.0
         payout_pct = prompt_float("Payout Percentage (%)", default_payout)
+
+        # 🧠 SMART STAKE SUGGESTION ENGINE ASSISTANT
+        stake = _prompt_smart_stake_selector(
+            account_id=acc["id"],
+            session_id=session_id,
+            payout_pct=payout_pct,
+            currency=acc["currency"],
+        )
+        if stake is None:
+            warning("Trade creation cancelled.")
+            pause()
+            return
 
         # Ask if trade outcome is known now (or keep open)
         outcome_idx = arrow_menu(
@@ -222,7 +282,7 @@ def _open_trade():
             return
 
         option_res = "WIN" if outcome_idx == 0 else ("LOSS" if outcome_idx == 1 else None)
-        notes = prompt("Notes (optional)", "")
+        notes      = prompt("Notes (optional)", "")
 
         trade_id = TradeModel.create(
             account_id=acc["id"],
@@ -238,7 +298,7 @@ def _open_trade():
 
         if option_res:
             pnl_val = round(stake * (payout_pct / 100.0), 2) if option_res == "WIN" else -round(stake, 2)
-            col = C_PROFIT if pnl_val >= 0 else C_LOSS
+            col     = C_PROFIT if pnl_val >= 0 else C_LOSS
             info(f"Deriv Option Trade #{trade_id} [{trade_type}] recorded as {option_res}! P&L: {col}{pnl_val:+,.2f}{C_RESET}")
         else:
             info(f"Deriv Option Trade #{trade_id} [{trade_type}] opened for ${stake:.2f}.")
@@ -258,7 +318,20 @@ def _open_trade():
             return
         trade_type = "BUY" if trade_type_idx == 0 else "SELL"
 
-        qty         = prompt_float("Quantity / Lot size")
+        # 🧠 SMART STAKE SUGGESTION ENGINE ASSISTANT
+        suggested_stake = _prompt_smart_stake_selector(
+            account_id=acc["id"],
+            session_id=session_id,
+            payout_pct=100.0,
+            currency=acc["currency"],
+        )
+
+        if suggested_stake is None:
+            warning("Trade creation cancelled.")
+            pause()
+            return
+
+        qty         = prompt_float("Quantity / Lot size / Position Value", suggested_stake)
         entry_price = prompt_float("Entry price")
         stop_loss   = prompt("Stop loss price (blank to skip)")
         take_profit = prompt("Take profit price (blank to skip)")

@@ -1,6 +1,6 @@
 # 📈 Trading Risk Management System CLI
 
-> **A terminal-based risk management dashboard, trading session tracker, and position calculator for traders, powered by Python & MySQL.**  
+> **A terminal-based risk management dashboard, trading session tracker, smart stake assistant, and position calculator for traders, powered by Python & MySQL.**  
 > *Developed by Sasindu Dilshara*
 
 ---
@@ -9,13 +9,20 @@
 
 **Trading Risk Management System CLI** is an interactive command-line application designed to help traders manage risk, track trading sessions, log daily performance, and execute trades across multiple account types—including **Standard Trading Accounts** and **Deriv Option Trading Accounts** (Rise/Fall options).
 
-Features zero-flicker ANSI arrow key navigation, automatic MySQL schema migrations, session confirmation workflows, and real-time P&L / payout calculations.
+Features zero-flicker ANSI arrow key navigation, automatic MySQL schema migrations, session confirmation workflows, **Smart Stake Assistant with 5 Safety Levels**, and real-time P&L / payout calculations.
 
 ---
 
 ## ✨ Key Features
 
 - 🎯 **Interactive Arrow-Key Navigation**: Flicker-free terminal UI using ANSI cursor positioning.
+- 🧠 **Smart Advanced Stake Suggestions (5 Safety Levels)**:
+  - **Level 1: Ultra Safe (0.5%)** — Maximum capital preservation during drawdown runs.
+  - **Level 2: Conservative (1.5%)** — *(Recommended)* Safe, steady compound growth.
+  - **Level 3: Moderate (3.0%)** — Balanced risk/reward for high-confidence setups.
+  - **Level 4: Aggressive (5.0%)** — Accelerated capital growth for strong trends.
+  - **Level 5: Max Risk Limit (10.0%)** — Upper risk ceiling capped by account risk rules.
+  - *Dynamic adjustments based on active session remaining capital, account balance, and win/loss streak alerts.*
 - 👥 **Multiple Account Types**:
   - **Standard Trading Account**: Forex, Stocks, Crypto (`BUY`/`SELL` positions with Stop-Loss & Take-Profit).
   - **Deriv Option Trading Account**: Digital/Binary Options with **Rise / Fall** (`RISE`/`FALL`) trading methods.
