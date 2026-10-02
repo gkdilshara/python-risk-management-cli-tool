@@ -9,28 +9,30 @@
 
 **Trading Risk Management System CLI** is an interactive command-line application designed to help traders manage risk, track trading sessions, log daily performance, and execute trades across multiple account types—including **Standard Trading Accounts** and **Deriv Option Trading Accounts** (Rise/Fall options).
 
-Features zero-flicker ANSI arrow key navigation, automatic MySQL schema migrations, session confirmation workflows, **Smart Stake Assistant with 5 Safety Levels**, and real-time P&L / payout calculations.
+Features zero-flicker ANSI arrow key navigation, automatic MySQL schema migrations, session confirmation workflows, **Smart Stake Assistant with 5 Safety Levels & Target Goal Optimization**, and real-time P&L / payout calculations.
 
 ---
 
 ## ✨ Key Features
 
 - 🎯 **Interactive Arrow-Key Navigation**: Flicker-free terminal UI using ANSI cursor positioning.
-- 🧠 **Smart Advanced Stake Suggestions (5 Safety Levels)**:
+- 🧠 **Smart Advanced Stake Suggestions (5 Safety Levels & Goal Optimization)**:
+  - **Target Profit & Willing Trades Integration**: Dynamically calculates the **🎯 Session Goal Optimal Stake** required per trade to reach your target profit within your planned trade budget.
   - **Level 1: Ultra Safe (0.5%)** — Maximum capital preservation during drawdown runs.
   - **Level 2: Conservative (1.5%)** — *(Recommended)* Safe, steady compound growth.
   - **Level 3: Moderate (3.0%)** — Balanced risk/reward for high-confidence setups.
   - **Level 4: Aggressive (5.0%)** — Accelerated capital growth for strong trends.
   - **Level 5: Max Risk Limit (10.0%)** — Upper risk ceiling capped by account risk rules.
-  - *Dynamic adjustments based on active session remaining capital, account balance, and win/loss streak alerts.*
+  - *Dynamic alerts for Target Profit Reached (`🏆`) and Max Planned Trades Executed (`⚠️`).*
 - 👥 **Multiple Account Types**:
   - **Standard Trading Account**: Forex, Stocks, Crypto (`BUY`/`SELL` positions with Stop-Loss & Take-Profit).
   - **Deriv Option Trading Account**: Digital/Binary Options with **Rise / Fall** (`RISE`/`FALL`) trading methods.
 - ⏱️ **Trading Sessions Management**:
-  - Auto-fetched session timestamps.
+  - **Target Profit Goal ($)** & **Amount of Willing / Planned Trades** configuration per session.
+  - Auto-fetched session creation timestamps.
   - Option trading parameters: **Trading Method** (Rise/Fall), **Payout %** (e.g. `95.0%`), and **Reserved Stake Capital**.
-  - **Interactive Confirmation Dialog**: Explicit confirmation prompt before saving a session.
-  - Live session statistics (Win Rate, Total Staked, Session P&L, Remaining Reserved Capital).
+  - **Interactive Confirmation Dialog**: Explicit confirmation prompt summarizing session targets before creation.
+  - Live session statistics (Target Progress %, Remaining Willing Trades, Win Rate, Total Staked, Session P&L).
 - 🛢️ **MySQL Auto-Initialization & Dynamic Migrations**: Automatically creates database schemas and safely migrates existing tables on startup via `.env`.
 - 🛡️ **Risk Rule Enforcement**: Set maximum risk per trade (%), daily loss limits, and maximum position size before opening positions.
 - 📊 **Real-time Account Dashboard**: Overview of account types, active trading sessions, win rate, P&L, risk limits, and open trades.

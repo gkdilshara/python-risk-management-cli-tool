@@ -76,8 +76,8 @@ def _prompt_smart_stake_selector(
     currency: str = "USD",
 ) -> float:
     """
-    Present the Smart Advanced Stake Suggestion Assistant with 5 Safety Levels.
-    Returns chosen stake amount (float) or None if cancelled.
+    Present the Smart Advanced Stake Suggestion Assistant with 5 Safety Levels
+    and Session Target Profit / Willing Trades guidance.
     """
     sugg = SmartStakeEngine.get_suggestions(account_id, session_id, payout_pct)
 
@@ -86,13 +86,34 @@ def _prompt_smart_stake_selector(
     section_header("🧠 SMART ADVANCED STAKE ASSISTANT (5 SAFETY LEVELS)")
 
     print(f"  {C_HEADER}Capital Basis:{C_RESET}     ${sugg['base_capital']:,.2f} {currency}  ({sugg['capital_source']})")
-    print(f"  {C_HEADER}Max Risk Limit:{C_RESET}    {sugg['max_risk_pct']:.1f}%\n")
+    print(f"  {C_HEADER}Max Risk Limit:{C_RESET}    {sugg['max_risk_pct']:.1f}%")
 
-    if sugg["recommendation_note"]:
+    if sugg.get("target_profit") is not None:
+        print(f"  {C_HEADER}Session Goal:{C_RESET}      Target Profit: ${sugg['target_profit']:,.2f} {currency}")
+
+    if sugg.get("max_planned_trades") is not None:
+        print(f"  {C_HEADER}Willing Trades:{C_RESET}    {sugg['max_planned_trades']} trades max")
+
+    print()
+
+    if sugg.get("target_status_note"):
+        info(sugg["target_status_note"])
+        print()
+
+    if sugg.get("recommendation_note"):
         warning(sugg["recommendation_note"])
         print()
 
     menu_items = []
+
+    # If optimal target stake calculated, offer it first as option 0
+    if sugg.get("target_optimal_stake") is not None and sugg["target_optimal_stake"] > 0:
+        opt_stake  = sugg["target_optimal_stake"]
+        opt_profit = round(opt_stake * (payout_pct / 100.0), 2)
+        menu_items.append(
+            f"🎯 Target Goal Optimal Stake ── ${opt_stake:,.2f}  (Est. Win: +${opt_profit:,.2f}) [SESSION GOAL]"
+        )
+
     for item in sugg["levels"]:
         rec_str    = " ⭐ RECOMMENDED" if item["is_recommended"] else ""
         breach_str = " (⚠️ BREACHES RULE)" if item["is_breach"] else ""
@@ -104,7 +125,7 @@ def _prompt_smart_stake_selector(
     menu_items.append("✏️   Enter Custom Stake Amount Manually...")
     menu_items.append("🔙  Cancel Trade")
 
-    subtitle_text = f"Select a safety level or enter a custom amount (Base: ${sugg['base_capital']:,.2f} {currency})"
+    subtitle_text = f"Select safety level, optimal target stake, or custom amount (Base: ${sugg['base_capital']:,.2f} {currency})"
     choice = arrow_menu("SMART STAKE SUGGESTIONS", menu_items, subtitle=subtitle_text)
 
     if choice < 0 or choice == len(menu_items) - 1:
@@ -113,7 +134,15 @@ def _prompt_smart_stake_selector(
     if choice == len(menu_items) - 2:
         return prompt_float("Enter Custom Stake Amount ($)")
 
-    chosen_level = sugg["levels"][choice]
+    if sugg.get("target_optimal_stake") is not None and sugg["target_optimal_stake"] > 0:
+        if choice == 0:
+            opt_s = sugg["target_optimal_stake"]
+            info(f"Selected Target Goal Optimal Stake: ${opt_s:,.2f} {currency}")
+            return opt_s
+        chosen_level = sugg["levels"][choice - 1]
+    else:
+        chosen_level = sugg["levels"][choice]
+
     info(f"Selected {chosen_level['name']} ({chosen_level['pct']:.1f}%): ${chosen_level['stake_amount']:,.2f} {currency}")
     return chosen_level["stake_amount"]
 
@@ -257,7 +286,7 @@ def _open_trade():
         default_payout = float(session["payout_percentage"]) if (session and session["payout_percentage"]) else 95.0
         payout_pct = prompt_float("Payout Percentage (%)", default_payout)
 
-        # 🧠 SMART STAKE SUGGESTION ENGINE ASSISTANT
+        # 🧠 SMART STAKE SUGGESTION ENGINE ASSISTANT (with Target Profit & Willing Trades logic)
         stake = _prompt_smart_stake_selector(
             account_id=acc["id"],
             session_id=session_id,

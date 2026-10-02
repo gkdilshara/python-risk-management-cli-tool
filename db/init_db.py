@@ -59,6 +59,8 @@ def init_database():
             trading_method          VARCHAR(50)  NOT NULL DEFAULT 'STANDARD',
             payout_percentage       DECIMAL(5, 2) DEFAULT NULL,
             reserved_stake_capital  DECIMAL(18, 2) NOT NULL DEFAULT 0.00,
+            target_profit           DECIMAL(18, 2) DEFAULT NULL,
+            max_planned_trades      INT          DEFAULT NULL,
             status                  ENUM('ACTIVE', 'COMPLETED', 'CANCELLED') NOT NULL DEFAULT 'ACTIVE',
             created_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
             ended_at                DATETIME     DEFAULT NULL,
@@ -152,7 +154,32 @@ def _run_migrations(cur, db_name: str):
             "ALTER TABLE accounts ADD COLUMN account_type ENUM('STANDARD', 'DERIV_OPTION') NOT NULL DEFAULT 'STANDARD' AFTER name"
         )
 
-    # 2. trades columns: session_id, trade_type ENUM, payout_percentage, option_result
+    # 2. trading_sessions target_profit & max_planned_trades
+    cur.execute(
+        """
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'trading_sessions' AND COLUMN_NAME = 'target_profit'
+        """,
+        (db_name,),
+    )
+    if cur.fetchone()[0] == 0:
+        cur.execute(
+            "ALTER TABLE trading_sessions ADD COLUMN target_profit DECIMAL(18, 2) DEFAULT NULL AFTER reserved_stake_capital"
+        )
+
+    cur.execute(
+        """
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'trading_sessions' AND COLUMN_NAME = 'max_planned_trades'
+        """,
+        (db_name,),
+    )
+    if cur.fetchone()[0] == 0:
+        cur.execute(
+            "ALTER TABLE trading_sessions ADD COLUMN max_planned_trades INT DEFAULT NULL AFTER target_profit"
+        )
+
+    # 3. trades columns: session_id, trade_type ENUM, payout_percentage, option_result
     cur.execute(
         """
         SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS

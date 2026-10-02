@@ -15,14 +15,17 @@ class SessionModel:
         trading_method: str = "STANDARD",
         payout_percentage: float = None,
         reserved_stake_capital: float = 0.0,
+        target_profit: float = None,
+        max_planned_trades: int = None,
         notes: str = "",
     ) -> int:
         cur = DBConnection.cursor()
         cur.execute(
             """
             INSERT INTO trading_sessions
-              (account_id, session_name, trading_method, payout_percentage, reserved_stake_capital, notes)
-            VALUES (%s, %s, %s, %s, %s, %s)
+              (account_id, session_name, trading_method, payout_percentage,
+               reserved_stake_capital, target_profit, max_planned_trades, notes)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 account_id,
@@ -30,6 +33,8 @@ class SessionModel:
                 trading_method.upper(),
                 payout_percentage,
                 reserved_stake_capital,
+                target_profit,
+                max_planned_trades,
                 notes,
             ),
         )
@@ -150,9 +155,17 @@ class SessionModel:
         total_pnl    = float(row["total_pnl"] or 0.0)
         total_staked = float(row["total_staked"] or 0.0)
 
-        win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
+        win_rate     = (wins / total_trades * 100) if total_trades > 0 else 0.0
         reserved_cap = float(session["reserved_stake_capital"])
         remaining_cap = reserved_cap + total_pnl
+
+        target_profit      = float(session["target_profit"]) if session.get("target_profit") is not None else None
+        max_planned_trades = int(session["max_planned_trades"]) if session.get("max_planned_trades") is not None else None
+
+        remaining_target = (target_profit - total_pnl) if target_profit is not None else None
+        target_progress  = (total_pnl / target_profit * 100) if (target_profit and target_profit > 0) else None
+
+        remaining_trades = (max_planned_trades - total_trades) if max_planned_trades is not None else None
 
         return {
             "session": session,
@@ -164,4 +177,9 @@ class SessionModel:
             "total_staked": total_staked,
             "reserved_capital": reserved_cap,
             "remaining_capital": remaining_cap,
+            "target_profit": target_profit,
+            "max_planned_trades": max_planned_trades,
+            "remaining_target": remaining_target,
+            "target_progress": target_progress,
+            "remaining_trades": remaining_trades,
         }

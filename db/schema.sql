@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS trading_sessions (
     trading_method          VARCHAR(50)  NOT NULL DEFAULT 'STANDARD', -- e.g. 'STANDARD', 'RISE_FALL'
     payout_percentage       DECIMAL(5, 2) DEFAULT NULL,            -- e.g. 95.00 for Deriv Option
     reserved_stake_capital  DECIMAL(18, 2) NOT NULL DEFAULT 0.00,  -- Reserved capital allocated
+    target_profit           DECIMAL(18, 2) DEFAULT NULL,           -- Target profit goal for the session
+    max_planned_trades      INT          DEFAULT NULL,             -- Amount of willing/planned trades
     status                  ENUM('ACTIVE', 'COMPLETED', 'CANCELLED') NOT NULL DEFAULT 'ACTIVE',
     created_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ended_at                DATETIME     DEFAULT NULL,

@@ -64,6 +64,9 @@ def _list_sessions():
         for s in sessions:
             status_col = C_SUCCESS if s["status"] == "ACTIVE" else (C_WARN if s["status"] == "COMPLETED" else C_DIM)
             payout_str = f"{float(s['payout_percentage']):.1f}%" if s["payout_percentage"] else "—"
+            target_str = f"${float(s['target_profit']):,.2f}" if s.get("target_profit") else "—"
+            trades_str = f"{s['max_planned_trades']} trades" if s.get("max_planned_trades") else "Unlimited"
+
             table.append([
                 s["id"],
                 s["account_name"],
@@ -71,13 +74,15 @@ def _list_sessions():
                 s["trading_method"],
                 payout_str,
                 f"{float(s['reserved_stake_capital']):,.2f}",
+                target_str,
+                trades_str,
                 f"{status_col}{s['status']}{C_RESET}",
                 s["created_at"],
             ])
 
         print(C_BORDER + tabulate(
             table,
-            headers=["ID", "Account", "Session Name", "Method", "Payout %", "Reserved Stake", "Status", "Created At"],
+            headers=["ID", "Account", "Session Name", "Method", "Payout %", "Reserved Cap", "Target Profit", "Willing Trades", "Status", "Created At"],
             tablefmt="rounded_outline",
         ))
     pause()
@@ -100,7 +105,6 @@ def _create_session():
     payout_pct = None
 
     if acc_type == "DERIV_OPTION":
-        # Select Trading Method for Option Account
         method_idx = arrow_menu(
             "SELECT TRADING METHOD",
             [
@@ -113,16 +117,19 @@ def _create_session():
             return
         trading_method = "RISE_FALL"
 
-        # Ask for Payout Percentage
-        payout_pct = prompt_float("Payout Percentage (%)", 95.0)
-
-        # Ask for Reserved Stake Capital
+        payout_pct     = prompt_float("Payout Percentage (%)", 95.0)
         reserved_stake = prompt_float("Reserved Stake Capital ($)", 500.00)
     else:
-        # Standard Account
         trading_method = "STANDARD"
-        payout_pct = None
+        payout_pct     = None
         reserved_stake = prompt_float("Reserved Session Capital ($)", 1000.00)
+
+    # Smart Target & Willing Trades Prompts
+    target_profit_raw  = prompt("Target Profit Goal ($) (blank for none)", "100.00")
+    willing_trades_raw = prompt("Amount of Willing / Planned Trades (blank for unlimited)", "5")
+
+    target_profit  = float(target_profit_raw) if target_profit_raw else None
+    planned_trades = int(willing_trades_raw) if willing_trades_raw else None
 
     # Session Name with default
     default_name = f"{trading_method} Session - {created_timestamp}"
@@ -142,6 +149,8 @@ def _create_session():
     if payout_pct is not None:
         print(C_BORDER + f"  │  {C_HEADER}Payout %:{C_RESET}         {payout_pct:.2f}%")
     print(C_BORDER + f"  │  {C_HEADER}Reserved Capital:{C_RESET} ${reserved_stake:,.2f} {acc['currency']}")
+    print(C_BORDER + f"  │  {C_HEADER}Target Profit:{C_RESET}    " + (f"${target_profit:,.2f}" if target_profit else "None"))
+    print(C_BORDER + f"  │  {C_HEADER}Willing Trades:{C_RESET}   " + (f"{planned_trades} trades" if planned_trades else "Unlimited"))
     if notes:
         print(C_BORDER + f"  │  {C_HEADER}Notes:{C_RESET}            {notes}")
     print(C_BORDER + "  └───────────────────────────────────────────────────────────┘\n")
@@ -154,6 +163,8 @@ def _create_session():
             trading_method=trading_method,
             payout_percentage=payout_pct,
             reserved_stake_capital=reserved_stake,
+            target_profit=target_profit,
+            max_planned_trades=planned_trades,
             notes=notes,
         )
         info(f"Trading Session #{session_id} '{session_name}' created successfully!")
@@ -196,6 +207,17 @@ def _view_session_stats():
     pnl_col = C_PROFIT if stats["total_pnl"] >= 0 else C_LOSS
     rem_col = C_SUCCESS if stats["remaining_capital"] >= 0 else C_LOSS
 
+    target_val = f"${stats['target_profit']:,.2f}" if stats["target_profit"] is not None else "—"
+    if stats["target_progress"] is not None:
+        prog_col   = C_PROFIT if stats["total_pnl"] >= stats["target_profit"] else C_WARN
+        target_val += f"  ({prog_col}{stats['target_progress']:.1f}% reached{C_RESET})"
+
+    trades_plan_val = f"{stats['total_trades']}"
+    if stats["max_planned_trades"] is not None:
+        trades_plan_val += f" / {stats['max_planned_trades']} willing trades"
+        if stats["remaining_trades"] is not None:
+            trades_plan_val += f" ({stats['remaining_trades']} remaining)"
+
     summary_rows = [
         ["Session ID",         s["id"]],
         ["Account",            f"{s['account_name']} [{s['account_type']}]"],
@@ -203,8 +225,10 @@ def _view_session_stats():
         ["Created At",         s["created_at"]],
         ["Payout %",           f"{float(s['payout_percentage']):.1f}%" if s["payout_percentage"] else "—"],
         ["Reserved Capital",   f"{stats['reserved_capital']:,.2f} {s['currency']}"],
+        ["Target Profit Goal", target_val],
+        ["Planned Trades",     trades_plan_val],
         ["Total Staked",       f"{stats['total_staked']:,.2f} {s['currency']}"],
-        ["Total Trades",       stats["total_trades"]],
+        ["Total Executed",     stats["total_trades"]],
         ["Wins / Losses",      f"{C_PROFIT}{stats['wins']}{C_RESET} / {C_LOSS}{stats['losses']}{C_RESET}"],
         ["Win Rate",           f"{stats['win_rate']:.1f}%"],
         ["Session P&L",        f"{pnl_col}{stats['total_pnl']:+,.2f} {s['currency']}{C_RESET}"],
